@@ -1,29 +1,22 @@
 # AGENTS.md
 
-## Repository layout
-- Root contains a separate `package.json`/lock and `node_modules` (`lucide-react`, `react-hot-toast`); the actual application lives in `shomajsetu/`.
-- `shomajsetu/` is a Next.js app (App Router) with its own `package.json`/lock, `node_modules`, `.next/`, and `.gitignore`.
-- Run app commands from `shomajsetu/` unless explicitly working on root dependencies.
+## Repository shape
+- Two separate git repositories: the root and `shomajsetu/`. Root tracks `shomajsetu` as a gitlink with no `.gitmodules`, so root `git status` shows only `m shomajsetu` (no app file diffs), and submodule commands fail. Inspect, diff, and commit app changes inside `shomajsetu/`.
+- Root has its own `package.json`/lock, an untracked `.env.local` (Mongo/Better Auth/URL keys), and thousands of tracked `node_modules/` files. No app source lives here; root auth deps (`better-auth`, `jose`, etc.) are not imported by the app. Install app dependencies in `shomajsetu/`, never at root.
+- The app is `shomajsetu/`: Next 16.4.6, React 19, Tailwind 4, JavaScript only (`.js`/`.jsx`). Run `dev`/`lint`/`build` from that directory.
+- READMEs are not setup docs: the root README is just a title, and `shomajsetu/README.md` is stale create-next-app boilerplate pointing at the deleted `app/page.tsx`. Trust config/source.
 
-## `shomajsetu/` app (verified)
-- Stack: Next.js `16.4.6`, React `19.3.0`, JavaScript (`.js`/`.jsx`), Tailwind CSS `4.3.3`, ESLint 9 flat config. `tsconfig.json` still exists (strict, generates route types) but contains no app source.
-- Scripts (`shomajsetu/package.json`): `npm run dev` (`next dev`), `npm run build` (`next build`), `npm run start` (`next start`), `npm run lint` (`eslint`). No test script is defined.
-- App Router lives in `src/app/` (not `app/`); do not recreate a root-level `app/` directory — Next.js will silently prefer it over `src/app/` and serve the wrong pages.
-- Entrypoints: `src/app/layout.jsx`, `src/app/page.jsx`, styles in `src/app/globals.css` (`@import "tailwindcss";`). App code is JavaScript-only (`.js`/`.jsx`); no `.ts`/`.tsx` files under `src/`.
-- Path alias `@/*` -> `./*` (from `tsconfig.json`), so imports look like `@/src/components/Navbar`.
-- `next.config.ts` allows remote images from `images.unsplash.com` via `images.remotePatterns`; external image hosts must be added there.
-- `next.config.ts`: enables `experimental.agentFeedback`, `cacheComponents`, `partialPrefetching`, and configures Turbopack to load `*.css` via `@tailwindcss/turbopack`.
-- ESLint config (`eslint.config.mjs`) extends `eslint-config-next/core-web-vitals` and `eslint-config-next/typescript`.
-- shadcn/ui is configured JS-only via `components.json` (`tsx: false`); primitives live in `src/components/ui/`, `cn()` in `src/lib/utils.js`. Add more with `npx shadcn@latest add <name>`.
-- Event routes are `/events` and `/events/[id]`; `/upcoming-events` only redirects to `/events`.
-- `src/data/mockEvents.js` uses `eventDate` (not `date`); events also carry `categoryGroup` (All/Environment/Health/Education/Relief/Community), `organizer`, and `currentVolunteers`. `getUpcomingEvents(limit)` is cached: pass a limit for `slice(0, limit)`, omit it for all.
-- Event listing search/category filtering is client-side in `EventsExplorer.jsx`; `events/loading.jsx` previews states with `EventSkeleton.jsx`. Join is demo-only local state in `EventJoinPanel.jsx`.
+## App layout and behavior
+- Routes live in `src/app/`, not `app/`. Creating a root-level `app/` makes Next serve the wrong pages. Entrypoints: `src/app/layout.jsx`, `page.jsx`, `globals.css` (`@import "tailwindcss";`).
+- Alias `@/*` -> `./` in `shomajsetu/` (imports look like `@/src/components/Navbar`). shadcn/ui is JS-only (`components.json` `tsx: false`): primitives in `src/components/ui/`, `cn()` in `src/lib/utils.js`.
+- `next.config.ts`: `cacheComponents`, `partialPrefetching`, `agentFeedback`, Turbopack Tailwind CSS loader, remote images allowed only from `images.unsplash.com` (add other hosts there).
+- Events: `/events` and `/events/[id]`; `/upcoming-events` only redirects. `src/data/mockEvents.js` uses `eventDate`/`dateLabel`, `categoryGroup`, `organizer`, `currentVolunteers`; `getUpcomingEvents(limit)` is `"use cache"`d — pass a limit to slice, omit for all.
+- `/login` and `/register` use real Better Auth email/password; the Navbar reads the live session and has working Sign Out. `/dashboard`, `/profile`, `/create-event`, `/manage-events`, `/joined-events` and event joining remain demo UI (static content/local state).
+- Auth env: Next loads `.env*` only from `shomajsetu/`; local `shomajsetu/.env.local` is a gitignored copy of the root env — keep them in sync. Better Auth handler is `/api/auth/[...all]` (JWT token at `/api/auth/token`).
 
-## Important quirks
-- `shomajsetu/AGENTS.md` is managed by `next dev` (`node_modules/next/dist/server/lib/generate-agent-files.js`): it writes/restores `<!-- BEGIN/END:nextjs-agent-rules -->` and `<!-- BEGIN/END:nextjs-agent-feedback -->` blocks. Do not remove these managed blocks from diffs; follow `shomajsetu/AGENTS.md` instructions when working in that app.
-- Next.js 16 APIs/conventions may differ from older training data; when coding in `shomajsetu/`, consult bundled docs in `shomajsetu/node_modules/next/dist/docs/` (per managed agent rules) before guessing.
-- `shomajsetu/package.json` declares `lucide-react`, `next-themes`, and `sonner`; the root `package.json` separately declares `lucide-react` and `react-hot-toast` (`react-hot-toast` is not used by the app — Sonner's `<Toaster />` is wired in `src/app/layout.jsx`). Install app dependencies in `shomajsetu/`, not at the repo root.
-- With `cacheComponents: true`, calling `new Date()`/`Date.now()` during render fails prerendering. Use a static value, `"use cache"` (as `getUpcomingEvents` does), or a client component instead.
-- Dynamic routes that read runtime `params` need `export const instant = false` (see `src/app/events/[id]/page.jsx`); otherwise the Navbar's `usePathname()` blocks prerendering.
-- Verify changes with `npm run lint` then `npm run build` from `shomajsetu/`; build catches prerender/config errors that lint does not.
-- `.gitignore` in `shomajsetu/` ignores `.env*`, `.next/`, `node_modules/`, and `next-env.d.ts`.
+## Next 16 / verification gotchas
+- `shomajsetu/AGENTS.md` is regenerated by `next dev`; preserve its managed feedback blocks and follow it. Consult `shomajsetu/node_modules/next/dist/docs/` before using Next 16 APIs.
+- With `cacheComponents`, `new Date()`/`Date.now()` during render breaks prerendering; the mock-events helper caches the "now" read. Dynamic routes reading `params` need `export const instant = false` (see `events/[id]/page.jsx`) because `Navbar` calls `usePathname()`.
+- Don't set route segment `runtime = "nodejs"` with `cacheComponents` — `next build` rejects it. Route handlers are Node by default here.
+- `npm run build` warns that root `package-lock.json` is outside `shomajsetu`'s git repo; the build still passes. Set `turbopack.root` only if lockfile resolution matters.
+- Verify from `shomajsetu/`: `npm run lint`, then `npm run build`. There is no test or `typecheck` script; the build runs TypeScript and catches prerender/config errors. App `.env*` and `next-env.d.ts` are gitignored; don't commit the root `.env.local`.
